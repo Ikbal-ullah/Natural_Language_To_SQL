@@ -1,0 +1,363 @@
+{
+  "generated_at": "2026-09-11 09:51:18",
+  "submission_rows": 5000000,
+  "database_size": "1169 MB",
+  "golden_latency": {
+    "queries": [
+      {
+        "id": "sf01",
+        "category": "simple_filter",
+        "ms": 0.04
+      },
+      {
+        "id": "sf02",
+        "category": "simple_filter",
+        "ms": 0.01
+      },
+      {
+        "id": "sf03",
+        "category": "simple_filter",
+        "ms": 4.88
+      },
+      {
+        "id": "sf04",
+        "category": "simple_filter",
+        "ms": 0.03
+      },
+      {
+        "id": "sf05",
+        "category": "simple_filter",
+        "ms": 0.01
+      },
+      {
+        "id": "sf06",
+        "category": "simple_filter",
+        "ms": 7.0
+      },
+      {
+        "id": "sf07",
+        "category": "simple_filter",
+        "ms": 7.96
+      },
+      {
+        "id": "sf08",
+        "category": "simple_filter",
+        "ms": 0.03
+      },
+      {
+        "id": "sf09",
+        "category": "simple_filter",
+        "ms": 0.1
+      },
+      {
+        "id": "sf10",
+        "category": "simple_filter",
+        "ms": 6.17
+      },
+      {
+        "id": "jn01",
+        "category": "join",
+        "ms": 451.89
+      },
+      {
+        "id": "jn02",
+        "category": "join",
+        "ms": 258.71
+      },
+      {
+        "id": "jn03",
+        "category": "join",
+        "ms": 34.93
+      },
+      {
+        "id": "jn04",
+        "category": "join",
+        "ms": 1.14
+      },
+      {
+        "id": "jn05",
+        "category": "join",
+        "ms": 47.9
+      },
+      {
+        "id": "jn06",
+        "category": "join",
+        "ms": 604.28
+      },
+      {
+        "id": "jn07",
+        "category": "join",
+        "ms": 19.84
+      },
+      {
+        "id": "jn08",
+        "category": "join",
+        "ms": 172.15
+      },
+      {
+        "id": "jn09",
+        "category": "join",
+        "ms": 367.35
+      },
+      {
+        "id": "jn10",
+        "category": "join",
+        "ms": 48.18
+      },
+      {
+        "id": "ag01",
+        "category": "aggregation",
+        "ms": 10.96
+      },
+      {
+        "id": "ag02",
+        "category": "aggregation",
+        "ms": 10.81
+      },
+      {
+        "id": "ag03",
+        "category": "aggregation",
+        "ms": 10.2
+      },
+      {
+        "id": "ag04",
+        "category": "aggregation",
+        "ms": 137.99
+      },
+      {
+        "id": "ag05",
+        "category": "aggregation",
+        "ms": 11.34
+      },
+      {
+        "id": "ag06",
+        "category": "aggregation",
+        "ms": 251.74
+      },
+      {
+        "id": "ag07",
+        "category": "aggregation",
+        "ms": 10.8
+      },
+      {
+        "id": "ag08",
+        "category": "aggregation",
+        "ms": 197.03
+      },
+      {
+        "id": "ag09",
+        "category": "aggregation",
+        "ms": 51.18
+      },
+      {
+        "id": "ag10",
+        "category": "aggregation",
+        "ms": 9.72
+      },
+      {
+        "id": "ag11",
+        "category": "aggregation",
+        "ms": 549.22
+      },
+      {
+        "id": "ag12",
+        "category": "aggregation",
+        "ms": 0.07
+      },
+      {
+        "id": "wn01",
+        "category": "window",
+        "ms": 35.97
+      },
+      {
+        "id": "wn02",
+        "category": "window",
+        "ms": 35.16
+      },
+      {
+        "id": "wn03",
+        "category": "window",
+        "ms": 1.34
+      },
+      {
+        "id": "wn04",
+        "category": "window",
+        "ms": 8.58
+      },
+      {
+        "id": "wn05",
+        "category": "window",
+        "ms": 0.03
+      },
+      {
+        "id": "wn06",
+        "category": "window",
+        "ms": 2.6
+      },
+      {
+        "id": "wn07",
+        "category": "window",
+        "ms": 0.96
+      },
+      {
+        "id": "wn08",
+        "category": "window",
+        "ms": 34.95
+      },
+      {
+        "id": "wn09",
+        "category": "window",
+        "ms": 44.72
+      },
+      {
+        "id": "wn10",
+        "category": "window",
+        "ms": 0.15
+      },
+      {
+        "id": "sq01",
+        "category": "subquery_cte",
+        "ms": 0.05
+      },
+      {
+        "id": "sq02",
+        "category": "subquery_cte",
+        "ms": 29.94
+      },
+      {
+        "id": "sq03",
+        "category": "subquery_cte",
+        "ms": 0.08
+      },
+      {
+        "id": "sq04",
+        "category": "subquery_cte",
+        "ms": 381.73
+      },
+      {
+        "id": "sq05",
+        "category": "subquery_cte",
+        "ms": 0.07
+      },
+      {
+        "id": "sq06",
+        "category": "subquery_cte",
+        "ms": 12.15
+      },
+      {
+        "id": "sq07",
+        "category": "subquery_cte",
+        "ms": 435.89
+      },
+      {
+        "id": "sq08",
+        "category": "subquery_cte",
+        "ms": 0.06
+      }
+    ],
+    "p50": 10.8,
+    "p95": 451.89,
+    "max": 604.28,
+    "min": 0.01,
+    "by_category_p50": {
+      "aggregation": 11.15,
+      "join": 110.17,
+      "simple_filter": 0.07,
+      "subquery_cte": 6.12,
+      "window": 5.59
+    }
+  },
+  "scaling": {
+    "10000": {
+      "rows": 10000,
+      "size": "512 kB",
+      "build_seconds": 0.0,
+      "point_lookup": {
+        "no_index_ms": 0.292,
+        "with_index_ms": 0.003,
+        "speedup": 97.3,
+        "index_size": "96 kB"
+      },
+      "range_aggregate": {
+        "no_index_ms": 0.364,
+        "with_index_ms": 0.008,
+        "speedup": 45.5,
+        "index_size": "240 kB"
+      }
+    },
+    "100000": {
+      "rows": 100000,
+      "size": "5120 kB",
+      "build_seconds": 0.1,
+      "point_lookup": {
+        "no_index_ms": 2.944,
+        "with_index_ms": 0.003,
+        "speedup": 981.3,
+        "index_size": "760 kB"
+      },
+      "range_aggregate": {
+        "no_index_ms": 3.703,
+        "with_index_ms": 0.034,
+        "speedup": 108.9,
+        "index_size": "2200 kB"
+      }
+    },
+    "1000000": {
+      "rows": 1000000,
+      "size": "49 MB",
+      "build_seconds": 1.5,
+      "point_lookup": {
+        "no_index_ms": 15.882,
+        "with_index_ms": 0.004,
+        "speedup": 3970.5,
+        "index_size": "7432 kB"
+      },
+      "range_aggregate": {
+        "no_index_ms": 18.383,
+        "with_index_ms": 0.418,
+        "speedup": 44.0,
+        "index_size": "21 MB"
+      }
+    },
+    "5000000": {
+      "rows": 5000000,
+      "size": "245 MB",
+      "build_seconds": 5.4,
+      "point_lookup": {
+        "no_index_ms": 69.123,
+        "with_index_ms": 0.065,
+        "speedup": 1063.4,
+        "index_size": "36 MB"
+      },
+      "range_aggregate": {
+        "no_index_ms": 83.996,
+        "with_index_ms": 2.323,
+        "speedup": 36.2,
+        "index_size": "107 MB"
+      }
+    }
+  },
+  "index_cost": {
+    "build_seconds": 8.3,
+    "total_bytes": 230055936,
+    "per_index": {
+      "ix_enrollments_learner": 3604480,
+      "ix_enrollments_cohort": 1523712,
+      "ix_cohorts_course": 16384,
+      "ix_assignments_course": 16384,
+      "ix_mentor_sessions_enrollment": 4317184,
+      "ix_mentor_sessions_mentor": 1957888,
+      "ix_payments_learner": 3219456,
+      "ix_payments_enrollment": 3948544,
+      "ix_submissions_enrollment_time": 157556736,
+      "ix_submissions_assignment_status": 35069952,
+      "ix_submissions_submitted_brin": 32768,
+      "ix_enrollments_course_status_cover": 6635520,
+      "ix_payments_refunded": 344064,
+      "ix_payments_succeeded_created": 3555328,
+      "ix_learners_lower_email": 5013504,
+      "ix_learners_mentors": 65536,
+      "ix_learners_status_signup": 3178496
+    }
+  }
+}

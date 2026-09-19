@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nl2sql — ask the learning platform</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #16181d; --muted: #656c7a;
+    --line: #dfe3ea; --accent: #2f6df6; --ok: #0f7b44; --ok2: #0f7b44;
+    --warn: #9a6400; --warn-bg: #fff6e0; --bad: #b3261e; --bad-bg: #fdecea;
+    --code-bg: #f2f4f8; --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1116; --panel: #171a21; --ink: #e7e9ee; --muted: #9aa2b1;
+      --line: #262b36; --accent: #6b9bff; --ok2: #4ecf8a;
+      --warn: #e5b567; --warn-bg: #2a2113; --bad: #ff8a80; --bad-bg: #2b1614;
+      --code-bg: #10131a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 22px 24px 10px; max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  main { max-width: 1400px; margin: 0 auto; padding: 10px 24px 60px; }
+  .ask { display: flex; gap: 10px; margin: 14px 0 10px; }
+  input[type=text] { flex: 1; padding: 12px 14px; font-size: 15px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { padding: 12px 20px; font-size: 15px; font-weight: 560; border: 0; border-radius: 9px;
+    background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px; }
+  .chip { font-size: 12.5px; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: minmax(0,1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; min-width: 0; }
+  .panel h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 9px; font-weight: 640; }
+  pre, code { font-family: var(--mono); font-size: 12.8px; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 12px; overflow-x: auto;
+    margin: 0; white-space: pre; }
+  .status { display: inline-block; font-size: 11.5px; font-weight: 640; padding: 3px 9px;
+    border-radius: 999px; text-transform: uppercase; letter-spacing: .05em; }
+  .s-ok { background: color-mix(in srgb, var(--ok2) 18%, transparent); color: var(--ok2); }
+  .s-clarify { background: var(--warn-bg); color: var(--warn); }
+  .s-rejected, .s-error { background: var(--bad-bg); color: var(--bad); }
+  .note { border-left: 3px solid var(--warn); background: var(--warn-bg); color: var(--warn);
+    padding: 9px 12px; border-radius: 0 7px 7px 0; font-size: 13px; margin-top: 9px; }
+  .err { border-left: 3px solid var(--bad); background: var(--bad-bg); color: var(--bad);
+    padding: 9px 12px; border-radius: 0 7px 7px 0; font-size: 13px; margin-top: 9px;
+    font-family: var(--mono); font-size: 12.5px; }
+  .interp { font-size: 14.5px; }
+  .assump { color: var(--muted); font-size: 13px; margin: 8px 0 0; padding-left: 18px; }
+  .tablewrap { overflow-x: auto; max-height: 460px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 620;
+    color: var(--muted); border-bottom: 1px solid var(--line); padding: 7px 10px;
+    white-space: nowrap; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+       font-variant-numeric: tabular-nums; }
+  td.num { text-align: right; }
+  .meta { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12.5px;
+    margin-top: 12px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .full { grid-column: 1 / -1; }
+  .hidden { display: none !important; }
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: -2px; margin-right: 7px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>nl2sql</h1>
+  <div class="sub">Ask a question about the learning platform. Every generated query is
+    parsed, validated, plan-checked and run read-only.</div>
+</header>
+<main>
+  <form class="ask" id="form">
+    <input type="text" id="q" placeholder="e.g. Which courses have the most enrollments?"
+           autocomplete="off" autofocus>
+    <button type="submit" id="go">Ask</button>
+  </form>
+  <div class="chips" id="chips"></div>
+
+  <div id="out" class="hidden">
+    <div class="grid">
+      <div class="panel full" id="head-panel">
+        <h2>What was asked <span id="status" class="status"></span></h2>
+        <div class="interp" id="interp"></div>
+        <ul class="assump hidden" id="assumptions"></ul>
+        <div class="note hidden" id="clarify"></div>
+        <div class="err hidden" id="error"></div>
+        <div class="meta" id="meta"></div>
+      </div>
+
+      <div class="panel" id="sql-panel">
+        <h2>Generated SQL</h2>
+        <pre id="sql"></pre>
+      </div>
+
+      <div class="panel" id="plan-panel">
+        <h2>How the database will answer it</h2>
+        <div id="plan" style="font-size:13.5px"></div>
+        <div id="warnings"></div>
+      </div>
+
+      <div class="panel full" id="rows-panel">
+        <h2>Results <span id="rowcount" class="sub"></span></h2>
+        <div class="tablewrap"><table id="table"></table></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (el, on) => el.classList.toggle('hidden', !on);
+
+fetch('/api/samples').then(r => r.json()).then(d => {
+  $('chips').innerHTML = '';
+  d.questions.forEach(q => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = q;
+    b.onclick = () => { $('q').value = q; $('form').requestSubmit(); };
+    $('chips').appendChild(b);
+  });
+});
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const question = $('q').value.trim();
+  if (!question) return;
+  $('go').disabled = true;
+  $('go').innerHTML = '<span class="spinner"></span>Asking';
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question })
+    });
+    render(await res.json());
+  } catch (err) {
+    alert('Request failed: ' + err);
+  } finally {
+    $('go').disabled = false; $('go').textContent = 'Ask';
+  }
+});
+
+function render(r) {
+  show($('out'), true);
+  $('status').textContent = r.status;
+  $('status').className = 'status s-' + r.status;
+  $('interp').textContent = r.interpretation || '—';
+
+  const a = $('assumptions');
+  a.innerHTML = (r.assumptions || []).map(x => `<li>${esc(x)}</li>`).join('');
+  show(a, (r.assumptions || []).length > 0);
+
+  show($('clarify'), !!r.clarification_question);
+  if (r.clarification_question) $('clarify').textContent = '❓ ' + r.clarification_question;
+
+  show($('error'), !!r.error);
+  if (r.error) $('error').textContent = r.error;
+
+  show($('sql-panel'), !!r.sql);
+  $('sql').textContent = r.sql || '';
+
+  show($('plan-panel'), !!r.plan_summary);
+  $('plan').textContent = r.plan_summary || '';
+  $('warnings').innerHTML = (r.warnings || [])
+    .map(w => `<div class="note">⚠ ${esc(w)}</div>`).join('');
+
+  show($('rows-panel'), r.status === 'ok');
+  $('rowcount').textContent = r.status === 'ok' ? `${r.row_count} row${r.row_count === 1 ? '' : 's'}` : '';
+  const t = $('table');
+  if (r.status === 'ok') {
+    const head = '<tr>' + r.columns.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+    const body = r.rows.map(row => '<tr>' + row.map(v => {
+      const num = typeof v === 'number';
+      return `<td class="${num ? 'num' : ''}">${v === null ? '<i style="opacity:.45">null</i>' : esc(String(v))}</td>`;
+    }).join('') + '</tr>').join('');
+    t.innerHTML = head + body;
+  } else { t.innerHTML = ''; }
+
+  $('meta').innerHTML = [
+    ['total', `${r.elapsed_ms} ms`],
+    ['generate', `${r.generation_ms} ms`],
+    ['execute', `${r.execution_ms} ms`],
+    ['retries', String(r.retries)],
+    ['provider', `${r.provider}${r.model ? ' · ' + r.model : ''}`],
+    ['tokens', `${r.tokens.input} in / ${r.tokens.output} out${r.tokens.cache_read ? ' / ' + r.tokens.cache_read + ' cached' : ''}`],
+  ].map(([k, v]) => `<span>${k} <b>${esc(v)}</b></span>`).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

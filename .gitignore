@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+db/artifacts/*.json
+
+# Personal learning / interview material
+.claude/
+INTERVIEW.md
+LEARN.md
+PITCH.md
+FAILURES.md
+drills/
+exercises/
+failures/
