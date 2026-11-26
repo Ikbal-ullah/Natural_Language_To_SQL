@@ -83,7 +83,10 @@ def bm25_scores(question: str, catalog: Catalog) -> dict[str, float]:
 
 def _neighbours(catalog: Catalog, name: str) -> set[str]:
     out = {fk.ref_table for fk in catalog.tables[name].foreign_keys}
-    out |= {t.name for t in catalog.tables.values() if any(fk.ref_table == name for fk in t.foreign_keys)}
+    out |= {
+        t.name for t in catalog.tables.values()
+        if any(fk.ref_table == name for fk in t.foreign_keys)
+    }
     out.discard(name)
     return {t for t in out if t in catalog.tables}
 
@@ -101,7 +104,7 @@ def _restrict(catalog: Catalog, names: list[str]) -> Catalog:
 
 
 def link_schema(
-    question: str, catalog: Catalog, *, top_k: int = 3, max_tables: int = 5
+    question: str, catalog: Catalog, *, top_k: int = 2, max_tables: int = 5
 ) -> LinkResult:
     scores = bm25_scores(question, catalog)
     ranked = sorted((n for n in scores if scores[n] > 0), key=lambda n: (-scores[n], n))

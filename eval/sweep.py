@@ -37,7 +37,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from eval.golden_set import GOLDEN_SET  # noqa: E402
-from eval.run_eval import estimate_cost, run_golden, summarize  # noqa: E402
+from eval.run_eval_learners import estimate_cost, run_golden, summarize  # noqa: E402
 from nl2sql.config import get_settings  # noqa: E402
 from nl2sql.llm import get_provider  # noqa: E402
 from nl2sql.pipeline import Pipeline  # noqa: E402

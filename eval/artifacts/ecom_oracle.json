@@ -1,0 +1,240 @@
+{
+ "provider": "oracle",
+ "model": "oracle",
+ "is_llm": false,
+ "n_items": 60,
+ "dataset": "eval/golden_dataset.json",
+ "ablations": [
+  {
+   "ablation": "baseline",
+   "schema_linking": false,
+   "max_retries": 0,
+   "execution_accuracy": {
+    "correct": 47,
+    "total": 47
+   },
+   "execution_accuracy_by_difficulty": {
+    "easy": {
+     "correct": 15,
+     "total": 15
+    },
+    "hard": {
+     "correct": 14,
+     "total": 14
+    },
+    "medium": {
+     "correct": 18,
+     "total": 18
+    }
+   },
+   "unsafe_rejection": {
+    "rejected": 10,
+    "total": 10,
+    "http_403_class": 8
+   },
+   "unanswerable_handled": {
+    "handled": 3,
+    "total": 3
+   },
+   "latency_ms_all": {
+    "p50": 4.18,
+    "p95": 12.91,
+    "n": 60
+   },
+   "latency_ms_answerable": {
+    "p50": 4.58,
+    "p95": 15.06
+   },
+   "retries_used_total": 0,
+   "questions_that_used_a_retry": 0,
+   "mean_tables_in_prompt": 7.0,
+   "failures": []
+  },
+  {
+   "ablation": "+schema_linking",
+   "schema_linking": true,
+   "max_retries": 0,
+   "execution_accuracy": {
+    "correct": 47,
+    "total": 47
+   },
+   "execution_accuracy_by_difficulty": {
+    "easy": {
+     "correct": 15,
+     "total": 15
+    },
+    "hard": {
+     "correct": 14,
+     "total": 14
+    },
+    "medium": {
+     "correct": 18,
+     "total": 18
+    }
+   },
+   "unsafe_rejection": {
+    "rejected": 10,
+    "total": 10,
+    "http_403_class": 8
+   },
+   "unanswerable_handled": {
+    "handled": 3,
+    "total": 3
+   },
+   "latency_ms_all": {
+    "p50": 4.21,
+    "p95": 11.45,
+    "n": 60
+   },
+   "latency_ms_answerable": {
+    "p50": 5.01,
+    "p95": 12.97
+   },
+   "retries_used_total": 0,
+   "questions_that_used_a_retry": 0,
+   "mean_tables_in_prompt": 4.7,
+   "failures": []
+  },
+  {
+   "ablation": "+error_retries",
+   "schema_linking": true,
+   "max_retries": 2,
+   "execution_accuracy": {
+    "correct": 47,
+    "total": 47
+   },
+   "execution_accuracy_by_difficulty": {
+    "easy": {
+     "correct": 15,
+     "total": 15
+    },
+    "hard": {
+     "correct": 14,
+     "total": 14
+    },
+    "medium": {
+     "correct": 18,
+     "total": 18
+    }
+   },
+   "unsafe_rejection": {
+    "rejected": 10,
+    "total": 10,
+    "http_403_class": 8
+   },
+   "unanswerable_handled": {
+    "handled": 3,
+    "total": 3
+   },
+   "latency_ms_all": {
+    "p50": 4.35,
+    "p95": 10.85,
+    "n": 60
+   },
+   "latency_ms_answerable": {
+    "p50": 5.11,
+    "p95": 13.52
+   },
+   "retries_used_total": 4,
+   "questions_that_used_a_retry": 2,
+   "mean_tables_in_prompt": 4.7,
+   "failures": []
+  }
+ ],
+ "schema_linking_recall": {
+  "covered": 47,
+  "total": 47,
+  "mean_tables_selected": 4.51,
+  "schema_tables": 7,
+  "top_k": 2,
+  "max_tables": 5,
+  "misses": []
+ },
+ "schema_linking_sweep": [
+  {
+   "covered": 43,
+   "total": 47,
+   "mean_tables_selected": 2.85,
+   "schema_tables": 7,
+   "top_k": 1,
+   "max_tables": 3,
+   "misses": [
+    {
+     "id": "m04",
+     "missing": [
+      "categories"
+     ]
+    },
+    {
+     "id": "h05",
+     "missing": [
+      "customers",
+      "reviews"
+     ]
+    },
+    {
+     "id": "h06",
+     "missing": [
+      "categories"
+     ]
+    },
+    {
+     "id": "h13",
+     "missing": [
+      "categories"
+     ]
+    }
+   ]
+  },
+  {
+   "covered": 45,
+   "total": 47,
+   "mean_tables_selected": 3.81,
+   "schema_tables": 7,
+   "top_k": 2,
+   "max_tables": 4,
+   "misses": [
+    {
+     "id": "h05",
+     "missing": [
+      "customers"
+     ]
+    },
+    {
+     "id": "h13",
+     "missing": [
+      "categories"
+     ]
+    }
+   ]
+  },
+  {
+   "covered": 47,
+   "total": 47,
+   "mean_tables_selected": 4.51,
+   "schema_tables": 7,
+   "top_k": 2,
+   "max_tables": 5,
+   "misses": []
+  },
+  {
+   "covered": 47,
+   "total": 47,
+   "mean_tables_selected": 4.62,
+   "schema_tables": 7,
+   "top_k": 3,
+   "max_tables": 5,
+   "misses": []
+  },
+  {
+   "covered": 47,
+   "total": 47,
+   "mean_tables_selected": 5.13,
+   "schema_tables": 7,
+   "top_k": 3,
+   "max_tables": 7,
+   "misses": []
+  }
+ ],
+ "finished_at_utc": "2026-11-26T12:23:19Z"
+}

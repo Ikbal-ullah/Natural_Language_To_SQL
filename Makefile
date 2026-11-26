@@ -82,10 +82,10 @@ types:
 check: lint types test
 
 eval:
-	$(PY) eval/run_eval.py
+	$(PY) eval/run_eval_learners.py
 
 safety:
-	$(PY) eval/run_eval.py --safety-only --tag safety
+	$(PY) eval/run_eval_learners.py --safety-only --tag safety
 
 sweep:
 	$(PY) eval/sweep.py
@@ -102,3 +102,26 @@ demos:
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+
+# ---------------------------------------------------------------------------
+# E-commerce hardening stack (docker). Python: .venv312 (3.12; .venv is 3.15 and lacks wheels)
+# ---------------------------------------------------------------------------
+PY312 := .venv312/bin/python
+
+shop-up:
+	docker compose up -d --wait
+	$(PY312) db/seed_ecommerce.py --checksum
+
+shop-test:
+	$(PY312) -m pytest tests/test_security_integration.py -q
+
+shop-eval:
+	$(PY312) eval/run_eval.py --provider oracle
+	$(PY312) eval/run_eval.py --provider faulty
+
+shop-eval-live:  # needs ANTHROPIC_API_KEY
+	$(PY312) eval/run_eval.py --provider anthropic
+	$(PY312) eval/render_results.py
+
+shop-down:
+	docker compose down -v

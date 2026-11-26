@@ -20,7 +20,7 @@ question ──> prompt (schema from the live catalog + retrieved examples)
         PLAN GATE       EXPLAIN, without ANALYZE; reject above a cost threshold
                 │        (nothing has executed yet)
                 ▼
-        EXECUTION       role with SELECT only · read-only txn · 5 s statement timeout
+        EXECUTION       role with SELECT only · read-only txn · 3 s statement timeout
                 │
                 ▼
           ANSWER        rows + SQL + plan in plain English + what was actually asked
@@ -45,7 +45,7 @@ make run              # API + one-page frontend on http://127.0.0.1:8912
 make safety           # 15 adversarial payloads through the validator — no model, no cost
 make demos            # four short, runnable explanations
 make drills           # 40 SQL exercises with a result-set checker
-make check            # ruff + mypy --strict + 214 tests
+make check            # ruff + mypy --strict + tests
 ```
 
 To use the model you need a credential; without one the pipeline falls back to a
@@ -55,6 +55,46 @@ deterministic offline baseline and says so in every result.
 export ANTHROPIC_API_KEY=sk-ant-...
 make eval             # 60-question golden set + 15 adversarial cases
 ```
+
+---
+
+## Hardening v2: e-commerce stack (Docker, one command)
+
+A second, self-contained dataset exercises the same pipeline: 7 tables, exactly 50,000
+rows, deterministic seed, a hardened read-only role, and a 60-question golden set.
+
+```bash
+python3.12 -m venv .venv312 && .venv312/bin/pip install -e ".[dev]"
+docker compose up -d --wait                 # postgres:16, :5433, schema + nl2sql_ro role from db/
+.venv312/bin/python db/seed_ecommerce.py    # 50,000 rows, deterministic (--checksum proves it)
+.venv312/bin/python -m pytest tests/test_security_integration.py -q    # live-DB adversarial suite
+.venv312/bin/python eval/run_eval.py --provider oracle                 # harness check, no LLM
+ANTHROPIC_API_KEY=sk-ant-... .venv312/bin/python eval/run_eval.py --provider anthropic   # live ablation
+```
+
+```
+question -> SCHEMA LINK (BM25 + 1-hop FK) -> LLM -> AST GATE -> EXPLAIN GATE -> nl2sql_ro
+                                                      |  security violation: HTTP 403, 0 retries
+                                                      '- fixable error: <= 2 error-guided retries
+```
+
+What changed vs. the original system (full list in [AUDIT_REPORT.md](AUDIT_REPORT.md)):
+
+* `db/init_roles.sql`: `nl2sql_ro` is SELECT-only, `default_transaction_read_only=on`, `statement_timeout=3000ms`,
+  `work_mem=16MB`; the API connects only as this role through `psycopg_pool`.
+* Validator: prefix-based forbidden functions (`pg_*`, `dblink*`, `lo_*`), foreign-schema block, unbounded `CROSS JOIN`
+  guard, stacked statements are a hard block, LIMIT is injected on non-scalar queries only.
+* Plan gate: a selective sequential scan of a large table (a missing index) is refused, not just warned.
+* Schema introspection adds sample values (PII columns excluded); `linker.py` does schema linking.
+* `/api/ask` returns **403** on a security violation; each request emits one JSON telemetry line.
+* `.github/workflows/ci.yml` runs the live-DB security suite against a `postgres:16` service container.
+
+Results, all from real runs, are in [EVAL_RESULTS.md](EVAL_RESULTS.md): 47/47 live-DB security tests, 265/265 in the
+full suite, and deterministic harness checks. **The live-LLM accuracy ablation has not been run** (no API key was
+available); the exact command is in EVAL_RESULTS §5. Interview prep: [OWNERSHIP_DRILL.md](OWNERSHIP_DRILL.md).
+
+Note: the 3 s statement timeout is sized for the 50k-row store. The original 5M-row learners database has queries
+that need longer, so its tests set `NL2SQL_STATEMENT_TIMEOUT_MS=10000` (`tests/conftest.py`).
 
 ---
 
@@ -99,7 +139,7 @@ stripped to `NotImplementedError` with precise specs and the tests that verify y
 | `bench/` | Latency distribution and the 10k→5M scaling curve |
 | `failures/` | The 8 deliberate bugs, runnable |
 | `demos/`, `drills/`, `exercises/` | Teaching artifacts |
-| `tests/` | 214 tests, including every adversarial case individually |
+| `tests/` | 265 tests, including every adversarial case individually; `test_security_integration.py` needs the Docker DB |
 
 ---
 
@@ -161,7 +201,7 @@ Four layers. Only one of them is the prompt, and it is the one that does not cou
 | 1. Prompt | asks for read-only SQL | the user argues with it — i.e. immediately |
 | 2. Validator | AST node-type checks, mandatory LIMIT | we have a bug |
 | 3. Plan gate | `EXPLAIN` (never `ANALYZE`) against a cost budget | the estimate is wrong |
-| 4. Role | `SELECT`-only grants + read-only txn + 5 s timeout | it never reads the user's input at all |
+| 4. Role | `SELECT`-only grants + read-only txn + 3 s timeout + 16 MB work_mem | it never reads the user's input at all |
 
 Layer 2 never receives the question — `validate(sql, catalog, settings)` has no parameter
 through which a prompt could reach it, and a test asserts the validator does not import the

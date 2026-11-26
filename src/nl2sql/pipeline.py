@@ -38,9 +38,9 @@ from typing import Any, Literal
 
 import psycopg
 
+from nl2sql import telemetry
 from nl2sql.config import Settings, get_settings
 from nl2sql.db import fetch_all
-from nl2sql import telemetry
 from nl2sql.linker import link_schema
 from nl2sql.llm import LLMError, LLMResponse, Provider, get_provider
 from nl2sql.plan_gate import GateResult, Verdict, check_plan
@@ -116,17 +116,21 @@ class Answer:
 # retrying it just burns the budget.
 RETRYABLE_CODES = frozenset(
     {
-        Code.PARSE_ERROR, Code.EMPTY, Code.MULTIPLE_STATEMENTS, Code.UNKNOWN_TABLE,
+        Code.PARSE_ERROR, Code.EMPTY, Code.UNKNOWN_TABLE,
         Code.UNKNOWN_COLUMN, Code.AMBIGUOUS_COLUMN, Code.MISSING_LIMIT,
         Code.LIMIT_TOO_LARGE, Code.SELECT_INTO, Code.LOCKING_CLAUSE, Code.CROSS_JOIN,
     }
 )
-# Deliberately NOT retryable: a write, a system-catalog read, or a forbidden function.
+# Deliberately NOT retryable: a write, a system-catalog read, a forbidden function, or a
+# stacked statement.
 # Those are not honest mistakes to be corrected, they are the thing the validator exists
 # to stop, and feeding them back to the model to "fix" is how you end up with a system
 # that negotiates with an attacker. Blocked once, blocked.
 HARD_BLOCK_CODES = frozenset(
-    {Code.NOT_A_READ, Code.WRITE_IN_SUBTREE, Code.SYSTEM_CATALOG, Code.FORBIDDEN_FUNCTION}
+    {
+        Code.NOT_A_READ, Code.WRITE_IN_SUBTREE, Code.SYSTEM_CATALOG, Code.FORBIDDEN_FUNCTION,
+        Code.MULTIPLE_STATEMENTS,  # stacked queries are the classic injection shape
+    }
 )
 
 

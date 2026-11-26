@@ -283,7 +283,9 @@ def _check_read_only(tree: exp.Expression, issues: list[Issue]) -> None:
 
 def _check_functions(tree: exp.Expression, issues: list[Issue]) -> None:
     for node in tree.find_all(exp.Func):
-        name = (node.sql_name() if hasattr(node, "sql_name") else type(node).__name__).lower()
+        name = (
+            node.sql_name() if hasattr(node, "sql_name") else type(node).__name__  # type: ignore[no-untyped-call]
+        ).lower()
         if isinstance(node, exp.Anonymous):
             name = str(node.this).lower()
         if name in FORBIDDEN_FUNCTIONS or name.startswith(FORBIDDEN_FUNCTION_PREFIXES):

@@ -63,8 +63,8 @@ class Settings(BaseSettings):
         alias="NL2SQL_SCHEMA_LINKING",
         description="Send only the question-relevant tables (BM25 + 1-hop FK) to the model.",
     )
-    link_top_k: int = Field(default=3, alias="NL2SQL_LINK_TOP_K")
-    link_max_tables: int = Field(default=6, alias="NL2SQL_LINK_MAX_TABLES")
+    link_top_k: int = Field(default=2, alias="NL2SQL_LINK_TOP_K")
+    link_max_tables: int = Field(default=5, alias="NL2SQL_LINK_MAX_TABLES")
 
     # --- pipeline ----------------------------------------------------------
     max_retries: int = Field(
