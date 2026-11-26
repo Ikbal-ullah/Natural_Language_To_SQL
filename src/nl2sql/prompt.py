@@ -124,6 +124,60 @@ Then write the query. Put the conclusion of that reasoning in `interpretation`.
 """
 
 
+# ---------------------------------------------------------------------------
+# e-commerce domain
+# ---------------------------------------------------------------------------
+
+ECOMMERCE_ROLE = (
+    "You translate questions about an online store (customers, products, orders, "
+    "payments, reviews) into PostgreSQL queries.\n"
+    "You are precise about the difference between what was asked and what the data can "
+    "answer."
+)
+
+ECOMMERCE_RULES = """\
+Rules for the SQL you produce:
+1. One statement. A SELECT (optionally with CTEs). Never INSERT, UPDATE, DELETE, DROP,
+   ALTER, GRANT or a data-modifying CTE. Never query pg_catalog / information_schema.
+2. Always include a LIMIT unless the query returns a single aggregate row. Use LIMIT 100
+   unless the question implies a specific count.
+3. Use only tables and columns from the schema above. Never invent a column.
+4. Use the exact enum spellings shown. 'delivered', not 'Delivered'.
+5. Qualify every column with a table alias when more than one table is involved.
+6. Always JOIN ... ON a foreign key. Never CROSS JOIN two tables and never write a comma
+   join without a join condition.
+7. Money columns (price, total_amount, amount, unit_price) are dollars. Line revenue is
+   quantity * unit_price * (1 - discount_pct).
+8. When a question asks for a rate or percentage, multiply by 100.0 (not 100) so the
+   division is not integer division.
+9. NULL is not a value: use IS NULL / IS NOT NULL, and COALESCE when summing nullable
+   columns. A LEFT JOIN is needed to keep rows that have no match.
+10. The data ends on 2025-01-01. Never use now() or current_date; express dates literally.
+
+When to ask instead of answering:
+Set action = "clarify" only when the question has two or more defensible readings that
+would produce materially different numbers, or cannot be answered from this schema at
+all. Do NOT ask for clarification merely because a question is broad or because you must
+pick a sensible default like a row limit or an ordering.
+"""
+
+ECOMMERCE_NOTES = """\
+Domain notes:
+- order_items is the largest table (25,000 rows); filter on an indexed column
+  (order_id, product_id) or aggregate it rather than filtering on discount_pct/quantity.
+- orders.status lifecycle: placed -> paid -> shipped -> delivered; or cancelled / refunded.
+- payments has one row per order; money moved only when payments.status = 'succeeded'.
+- shipped_at / delivered_at are NULL until the event happens; reviews.body and
+  orders.coupon_code are NULL when absent; categories.parent_id is NULL for top-level
+  categories."""
+
+DOMAINS: dict[str, tuple[str, str, str | None]] = {
+    # name -> (role, rules, schema notes; None = serializer default)
+    "learning": (BASE_ROLE, SQL_RULES, None),
+    "ecommerce": (ECOMMERCE_ROLE, ECOMMERCE_RULES, ECOMMERCE_NOTES),
+}
+
+
 @dataclass(frozen=True)
 class BuiltPrompt:
     """A prompt ready to send, with the pieces kept separate for caching and for debugging."""
@@ -157,6 +211,7 @@ def build_prompt(
     few_shot_count: int = 4,
     error_feedback: str | None = None,
     previous_sql: str | None = None,
+    domain: str = "learning",
 ) -> BuiltPrompt:
     """Assemble the system and user messages.
 
@@ -165,17 +220,21 @@ def build_prompt(
     question and any retry feedback. Putting the question in the system message would
     invalidate the cache on every request, the most common prompt-caching mistake.
     """
-    schema_text = serialize(catalog, schema_format)
+    role, rules, notes = DOMAINS[domain]
+    schema_text = serialize(catalog, schema_format) if notes is None else serialize(
+        catalog, schema_format, notes=notes
+    )
 
     if strategy == "minimal":
         system = (
-            f"{BASE_ROLE}\n\nSchema:\n{schema_text}\n\n"
+            f"{role}\n\nSchema:\n{schema_text}\n\n"
             "Return one PostgreSQL SELECT with a LIMIT."
         )
         examples: list[FewShotExample] = []
     else:
-        examples = select_examples(question, few_shot_count)
-        parts = [BASE_ROLE, "", "Schema:", schema_text, "", SQL_RULES]
+        # The few-shot bank holds learning-platform queries only.
+        examples = select_examples(question, few_shot_count) if domain == "learning" else []
+        parts = [role, "", "Schema:", schema_text, "", rules]
         if strategy == "cot":
             parts += ["", COT_RULES]
         if examples:

@@ -37,6 +37,8 @@ from nl2sql.config import Settings, get_settings
 from nl2sql.db import Plan, PlanNode, explain, table_row_estimates
 
 SCAN_NODES = frozenset({"Seq Scan", "Parallel Seq Scan"})
+# A filtered scan that keeps at most this fraction of a large table is "selective".
+SELECTIVE_FRACTION = 0.05
 
 
 class Verdict(StrEnum):
@@ -118,15 +120,16 @@ def check_plan(
     *,
     settings: Settings | None = None,
     large_tables: set[str] | None = None,
+    row_estimates: dict[str, int] | None = None,
 ) -> GateResult:
     """EXPLAIN the query and decide whether it may run."""
     settings = settings or get_settings()
     if large_tables is None:
+        row_estimates = table_row_estimates(settings)
         large_tables = {
-            name
-            for name, rows in table_row_estimates(settings).items()
-            if rows >= settings.large_table_rows
+            name for name, rows in row_estimates.items() if rows >= settings.large_table_rows
         }
+    row_estimates = row_estimates or {}
 
     plan = explain(sql, analyze=False, settings=settings)
     findings: list[PlanFinding] = []
@@ -143,6 +146,27 @@ def check_plan(
 
     for node in plan.nodes:
         if node.node_type in SCAN_NODES and node.relation in large_tables:
+            table_rows = row_estimates.get(node.relation or "", 0)
+            if (
+                "Filter" in node.raw
+                and table_rows > 0
+                and node.plan_rows <= SELECTIVE_FRACTION * table_rows
+            ):
+                # A sequential scan that reads every row of a large table in order to keep
+                # a small fraction of them is the plan-level signature of a missing index:
+                # the predicate is selective but nothing can seek on it. Refused (the model
+                # is told to filter on an indexed column); a plain unfiltered scan, which
+                # an aggregate legitimately needs, stays a warning below.
+                findings.append(
+                    PlanFinding(
+                        "SELECTIVE_SEQ_SCAN_LARGE_TABLE",
+                        f"sequential scan over large table {node.relation} "
+                        f"(~{table_rows:,} rows) filtered down to "
+                        f"~{node.plan_rows:,.0f} on an unindexed column",
+                        Verdict.BLOCK,
+                    )
+                )
+                continue
             # A warning, not a block. Some legitimate questions genuinely require reading
             # every row -- "how many submissions are there in total" is one -- and a gate
             # that refuses those is a gate people route around. The cost check above is

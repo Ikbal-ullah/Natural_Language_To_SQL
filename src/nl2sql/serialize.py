@@ -50,8 +50,12 @@ def _col_line(table: Table, indent: str = "  ") -> list[str]:
         if c.is_primary_key:
             bits.append("PRIMARY KEY" if len(table.primary_key) == 1 else "PK")
         line = " ".join(bits)
-        if c.comment:
-            line = f"{line}  -- {c.comment}"
+        note = c.comment or ""
+        if c.samples:
+            eg = "e.g. " + ", ".join(repr(v) for v in c.samples)
+            note = f"{note} ({eg})" if note else eg
+        if note:
+            line = f"{line}  -- {note}"
         lines.append(line)
     return lines
 
@@ -159,9 +163,17 @@ _RENDERERS = {
 }
 
 
-def serialize(catalog: Catalog, fmt: SchemaFormat = "ddl", *, notes: bool = True) -> str:
-    """Render the catalog in the requested format."""
+def serialize(
+    catalog: Catalog, fmt: SchemaFormat = "ddl", *, notes: bool | str = True
+) -> str:
+    """Render the catalog in the requested format.
+
+    `notes=True` appends the learning-domain notes; a string appends that text instead
+    (used for other domains); False appends nothing.
+    """
     if fmt not in _RENDERERS:
         raise ValueError(f"unknown schema format {fmt!r}; expected one of {sorted(_RENDERERS)}")
     body = _RENDERERS[fmt](catalog)
+    if isinstance(notes, str):
+        return f"{body}\n\n{notes}" if notes else body
     return f"{body}\n\n{SCHEMA_NOTES}" if notes else body

@@ -21,9 +21,12 @@ Two commitments here:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
+
+from psycopg import sql as pgsql
 
 from nl2sql.config import Settings
 from nl2sql.db import readonly_cursor
@@ -40,6 +43,7 @@ class Column:
     comment: str | None = None
     enum_values: tuple[str, ...] = ()
     is_primary_key: bool = False
+    samples: tuple[str, ...] = ()  # a few representative values of a low-cardinality column
 
     def type_label(self) -> str:
         """Enum columns are shown with their values: the model must not invent 'ACTIVE'."""
@@ -182,8 +186,34 @@ ORDER BY rel.relname, con.contype
 HIDDEN_TABLES = frozenset({"schema_migrations"})
 
 
-def introspect(settings: Settings | None = None) -> Catalog:
-    """Read the live schema out of PostgreSQL's catalogs."""
+# Columns whose values are personal data are never sampled: sample values are copied into
+# the LLM prompt, i.e. sent to a third party.
+_PII_COLUMN = re.compile(
+    r"(email|phone|full_name|first_name|last_name|address|password|token|ssn|secret|ip_addr)"
+)
+_TEXT_TYPES = ("text", "character varying", "character", "varchar")
+_SAMPLE_SCAN_ROWS = 500   # look at the first N rows only: bounded cost on a 5M-row table
+_SAMPLE_MAX_DISTINCT = 30  # more distinct values than this -> free text, not categorical
+_SAMPLE_KEEP = 5
+
+
+def _sample_values(cur: Any, table: str, column: str) -> tuple[str, ...]:
+    query = pgsql.SQL(
+        "SELECT v FROM (SELECT {c} AS v FROM {t} WHERE {c} IS NOT NULL LIMIT {n}) s "
+        "GROUP BY v ORDER BY count(*) DESC, v LIMIT {m}"
+    ).format(
+        c=pgsql.Identifier(column), t=pgsql.Identifier(table),
+        n=pgsql.Literal(_SAMPLE_SCAN_ROWS), m=pgsql.Literal(_SAMPLE_MAX_DISTINCT + 1),
+    )
+    cur.execute(query)
+    values = [str(r["v"]) for r in cur.fetchall()]
+    if not values or len(values) > _SAMPLE_MAX_DISTINCT:
+        return ()
+    return tuple(v for v in values[:_SAMPLE_KEEP] if len(v) <= 40)
+
+
+def introspect(settings: Settings | None = None, *, sample_values: bool = True) -> Catalog:
+    """Read the live schema (tables, columns, PKs, FKs, sample values) from the catalogs."""
     with readonly_cursor(settings) as cur:
         cur.execute(_TABLES_SQL)
         table_meta = {r["table_name"]: r for r in cur.fetchall()}
@@ -191,6 +221,19 @@ def introspect(settings: Settings | None = None) -> Catalog:
         column_rows = cur.fetchall()
         cur.execute(_CONSTRAINTS_SQL)
         constraint_rows = cur.fetchall()
+        samples: dict[tuple[str, str], tuple[str, ...]] = {}
+        if sample_values:
+            for r in column_rows:
+                if (
+                    r["table_name"] in HIDDEN_TABLES
+                    or r["enum_values"]
+                    or not r["data_type"].startswith(_TEXT_TYPES)
+                    or _PII_COLUMN.search(r["column_name"])
+                ):
+                    continue
+                samples[(r["table_name"], r["column_name"])] = _sample_values(
+                    cur, r["table_name"], r["column_name"]
+                )
 
     pk_cols: dict[str, tuple[str, ...]] = {}
     fks: dict[str, list[ForeignKey]] = {}
@@ -225,6 +268,7 @@ def introspect(settings: Settings | None = None) -> Catalog:
                 comment=r["comment"],
                 enum_values=tuple(r["enum_values"] or ()),
                 is_primary_key=r["column_name"] in pk_cols.get(table, ()),
+                samples=samples.get((table, r["column_name"]), ()),
             )
         )
 

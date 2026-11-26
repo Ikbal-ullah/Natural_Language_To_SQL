@@ -84,6 +84,7 @@ class Code(StrEnum):
     AMBIGUOUS_COLUMN = "AMBIGUOUS_COLUMN"
     MISSING_LIMIT = "MISSING_LIMIT"
     LIMIT_TOO_LARGE = "LIMIT_TOO_LARGE"
+    CROSS_JOIN = "CROSS_JOIN"
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,14 @@ FORBIDDEN_FUNCTIONS = frozenset(
         "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
         "table_to_xml", "cursor_to_xml",
     }
+)
+
+# Anything in these namespaces is an administrative or filesystem/network primitive.
+# An exact-name denylist (above) is bypassable by the next function PostgreSQL ships, e.g.
+# pg_ls_waldir() or pg_read_server_files-era helpers, so whole prefixes are denied too.
+FORBIDDEN_FUNCTION_PREFIXES = ("pg_", "dblink", "lo_", "pgp_", "xpath_", "txid_", "inet_")
+FORBIDDEN_FUNCTIONS = FORBIDDEN_FUNCTIONS | frozenset(
+    {"current_setting", "version", "current_database", "current_schema", "current_schemas"}
 )
 
 SYSTEM_SCHEMAS = frozenset({"pg_catalog", "information_schema", "pg_toast", "pg_temp"})
@@ -277,7 +286,7 @@ def _check_functions(tree: exp.Expression, issues: list[Issue]) -> None:
         name = (node.sql_name() if hasattr(node, "sql_name") else type(node).__name__).lower()
         if isinstance(node, exp.Anonymous):
             name = str(node.this).lower()
-        if name in FORBIDDEN_FUNCTIONS:
+        if name in FORBIDDEN_FUNCTIONS or name.startswith(FORBIDDEN_FUNCTION_PREFIXES):
             issues.append(
                 Issue(
                     Code.FORBIDDEN_FUNCTION,
@@ -316,6 +325,15 @@ def _check_tables(
             )
             continue
         if name in local or name in ALLOWED_TABLE_FUNCTIONS:
+            continue
+        if schema_name not in ("", "public"):
+            issues.append(
+                Issue(
+                    Code.UNKNOWN_TABLE,
+                    f"Schema {schema_name!r} is not accessible.",
+                    hint="Query tables without a schema prefix.",
+                )
+            )
             continue
         if not catalog.has_table(name):
             issues.append(
@@ -389,6 +407,102 @@ def _check_columns(tree: exp.Expression, catalog: Catalog, issues: list[Issue]) 
         )
 
 
+def _is_cross_join(join: exp.Join) -> bool:
+    """True for CROSS JOIN, a comma join, or a JOIN whose ON clause is a constant true."""
+    if join.args.get("using"):
+        return False
+    on = join.args.get("on")
+    kind = str(join.args.get("kind") or "").upper()
+    side = join.args.get("side")
+    if kind == "CROSS":
+        return True
+    if on is None:
+        return not side and not kind  # bare `FROM a, b` / `JOIN b` with no condition
+    if isinstance(on, exp.Boolean) and on.this is True:
+        return True
+    return (
+        isinstance(on, exp.EQ)
+        and isinstance(on.this, exp.Literal)
+        and isinstance(on.expression, exp.Literal)
+        and on.this.name == on.expression.name  # ON 1 = 1
+    )
+
+
+def _has_column_equality(select: exp.Select) -> bool:
+    where = select.args.get("where")
+    if where is None:
+        return False
+    return any(
+        isinstance(eq.this, exp.Column) and isinstance(eq.expression, exp.Column)
+        for eq in where.find_all(exp.EQ)
+    )
+
+
+def _check_cross_joins(tree: exp.Expression, issues: list[Issue]) -> None:
+    """Reject a join of two real tables with no join condition (Cartesian product).
+
+    A CROSS JOIN between orders (10k rows) and order_items (25k rows) is 250 million rows
+    and no LIMIT saves you: the planner still has to produce the product before sorting
+    or aggregating it. Joining against a CTE, subquery, LATERAL or set-returning function
+    (the "one-row totals" pattern, date spines) is allowed: those are bounded by
+    construction.
+    """
+    local = _cte_names(tree)
+    for join in tree.find_all(exp.Join):
+        if not _is_cross_join(join):
+            continue
+        right = join.this
+        if not isinstance(right, exp.Table):
+            continue  # subquery / lateral / table function: bounded by construction
+        name = str(right.name or "").lower()
+        if name in local or name in ALLOWED_TABLE_FUNCTIONS or isinstance(right.this, exp.Func):
+            continue
+        select = join.parent
+        explicit_cross = str(join.args.get("kind") or "").upper() == "CROSS"
+        if (
+            not explicit_cross
+            and join.args.get("on") is None
+            and isinstance(select, exp.Select)
+            and _has_column_equality(select)
+        ):
+            continue  # legacy comma join whose WHERE supplies the join condition
+        issues.append(
+            Issue(
+                Code.CROSS_JOIN,
+                f"Unbounded Cartesian product: table {name!r} is joined without a join condition.",
+                hint="Use JOIN ... ON <fk> = <pk> following the foreign keys.",
+            )
+        )
+        return
+
+
+def is_scalar_query(tree: exp.Expression) -> bool:
+    """True when the query can only ever return one row.
+
+    A LIMIT is for bounding a result that can grow; `SELECT count(*) FROM orders` cannot.
+    The shape test: a plain SELECT, no GROUP BY / DISTINCT / window, and every projected
+    column reference sits inside an aggregate (or there is no FROM at all).
+    """
+    node = tree.this if isinstance(tree, exp.Subquery) and tree.this is not None else tree
+    if not isinstance(node, exp.Select):
+        return False
+    if node.args.get("group") or node.args.get("distinct") or node.args.get("having"):
+        return False
+    projections = node.expressions
+    if not projections:
+        return False
+    for proj in projections:
+        if any(True for _ in proj.find_all(exp.Window, exp.UDTF, exp.Unnest)):
+            return False
+        has_agg = proj.find(exp.AggFunc) is not None
+        for col in proj.find_all(exp.Column):
+            if col.find_ancestor(exp.AggFunc) is None:
+                return False
+        if not has_agg and node.args.get("from") is not None:
+            return False
+    return True
+
+
 def _limit_value(tree: exp.Expression) -> int | None:
     """Extract the row bound from the outermost query.
 
@@ -433,6 +547,8 @@ def _check_limit(tree: exp.Expression, settings: Settings, issues: list[Issue]) 
     of an out-of-memory kill. FAILURES.md #2 measures exactly that difference.
     """
     value = _limit_value(tree)
+    if value is None and is_scalar_query(tree):
+        return  # a one-row aggregate needs no bound
     if value is None:
         issues.append(
             Issue(
@@ -485,6 +601,7 @@ def validate(
         return ValidationResult(ok=False, sql=sql, issues=issues, ast=tree)
 
     _check_functions(tree, issues)
+    _check_cross_joins(tree, issues)
     tables = _check_tables(tree, catalog, issues)
     _check_columns(tree, catalog, issues)
     _check_limit(tree, settings, issues)

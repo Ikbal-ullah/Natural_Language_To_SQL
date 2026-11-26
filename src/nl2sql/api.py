@@ -25,7 +25,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,7 @@ from nl2sql.db import close_pools, table_row_estimates
 from nl2sql.pipeline import Answer, Pipeline
 from nl2sql.schema import get_catalog
 from nl2sql.serialize import serialize
+from nl2sql.telemetry import configure_json_logging
 
 STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
@@ -55,6 +56,7 @@ class AskRequest(BaseModel):
     schema_format: str | None = None
     few_shot_count: int | None = Field(default=None, ge=0, le=12)
     execute: bool = True
+    schema_linking: bool | None = None
 
 
 class AskResponse(BaseModel):
@@ -79,6 +81,9 @@ class AskResponse(BaseModel):
     provider: str
     model: str
     tokens: dict[str, int]
+    tables_selected: list[str] = []
+    plan_cost: float = 0.0
+    security_violation: bool = False
 
 
 _pipeline: Pipeline | None = None
@@ -95,6 +100,7 @@ def get_pipeline() -> Pipeline:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Warm the pool and the catalog at startup so the first user request does not pay for
     # connection setup and four catalog queries.
+    configure_json_logging()
     get_pipeline()
     yield
     close_pools()
@@ -141,6 +147,9 @@ def to_response(answer: Answer) -> AskResponse:
             "cache_read": answer.cache_read_tokens,
             "cache_write": answer.cache_write_tokens,
         },
+        tables_selected=answer.tables_selected,
+        plan_cost=round(answer.plan_cost, 2),
+        security_violation=answer.security_violation,
     )
 
 
@@ -151,7 +160,7 @@ def _jsonable(value: Any) -> Any:
 
 
 @app.post("/api/ask", response_model=AskResponse)
-def ask(request: AskRequest) -> AskResponse:
+def ask(request: AskRequest) -> AskResponse | JSONResponse:
     pipeline = get_pipeline()
     answer = pipeline.answer(
         request.question,
@@ -159,8 +168,14 @@ def ask(request: AskRequest) -> AskResponse:
         schema_format=request.schema_format,  # type: ignore[arg-type]
         few_shot_count=request.few_shot_count,
         execute=request.execute,
+        schema_linking=request.schema_linking,
     )
-    return to_response(answer)
+    response = to_response(answer)
+    if answer.security_violation:
+        # A security violation is a refusal, not a malformed request: 403, body carries
+        # the validator's reason, and the pipeline has already spent zero retries on it.
+        return JSONResponse(status_code=403, content=response.model_dump())
+    return response
 
 
 @app.get("/api/schema")

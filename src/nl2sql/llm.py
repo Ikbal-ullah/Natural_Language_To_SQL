@@ -213,6 +213,11 @@ class RetrievalProvider:
         self.settings = settings or get_settings()
 
     def generate(self, prompt: BuiltPrompt) -> LLMResponse:
+        if self.settings.domain != "learning":
+            raise LLMError(
+                f"no offline retrieval baseline for domain {self.settings.domain!r}; "
+                "export ANTHROPIC_API_KEY to use the model"
+            )
         question = prompt.user.split("\n", 1)[0].removeprefix("Question: ")
         matches = select_examples(question, 1)
         if not matches:

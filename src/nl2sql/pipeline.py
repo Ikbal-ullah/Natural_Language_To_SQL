@@ -40,6 +40,8 @@ import psycopg
 
 from nl2sql.config import Settings, get_settings
 from nl2sql.db import fetch_all
+from nl2sql import telemetry
+from nl2sql.linker import link_schema
 from nl2sql.llm import LLMError, LLMResponse, Provider, get_provider
 from nl2sql.plan_gate import GateResult, Verdict, check_plan
 from nl2sql.prompt import PromptStrategy, build_prompt
@@ -89,6 +91,11 @@ class Answer:
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     estimated_cost: float = 0.0
+    # --- hardening telemetry ---
+    tables_selected: list[str] = field(default_factory=list)  # tables shown to the model
+    schema_linking: bool = False
+    plan_cost: float = 0.0              # EXPLAIN total cost of the executed/last plan
+    security_violation: bool = False    # True -> HTTP 403, zero retries
 
     @property
     def ok(self) -> bool:
@@ -111,7 +118,7 @@ RETRYABLE_CODES = frozenset(
     {
         Code.PARSE_ERROR, Code.EMPTY, Code.MULTIPLE_STATEMENTS, Code.UNKNOWN_TABLE,
         Code.UNKNOWN_COLUMN, Code.AMBIGUOUS_COLUMN, Code.MISSING_LIMIT,
-        Code.LIMIT_TOO_LARGE, Code.SELECT_INTO, Code.LOCKING_CLAUSE,
+        Code.LIMIT_TOO_LARGE, Code.SELECT_INTO, Code.LOCKING_CLAUSE, Code.CROSS_JOIN,
     }
 )
 # Deliberately NOT retryable: a write, a system-catalog read, or a forbidden function.
@@ -153,10 +160,12 @@ class Pipeline:
         few_shot_count: int,
         feedback: str | None,
         previous_sql: str | None,
+        prompt_catalog: Catalog | None = None,
     ) -> LLMResponse:
         prompt = build_prompt(
             question,
-            self.catalog,
+            prompt_catalog or self.catalog,
+            domain=self.settings.domain,
             strategy=strategy,
             schema_format=schema_format,
             few_shot_count=few_shot_count,
@@ -175,6 +184,34 @@ class Pipeline:
         few_shot_count: int | None = None,
         max_retries: int | None = None,
         execute: bool = True,
+        schema_linking: bool | None = None,
+    ) -> Answer:
+        """Schema link -> LLM generate -> AST gate -> EXPLAIN gate -> execute.
+
+        Emits one structured telemetry record per call. See `_run` for the loop.
+        """
+        result = self._run(
+            question,
+            strategy=strategy,
+            schema_format=schema_format,
+            few_shot_count=few_shot_count,
+            max_retries=max_retries,
+            execute=execute,
+            schema_linking=schema_linking,
+        )
+        telemetry.record(result)
+        return result
+
+    def _run(
+        self,
+        question: str,
+        *,
+        strategy: PromptStrategy | None,
+        schema_format: SchemaFormat | None,
+        few_shot_count: int | None,
+        max_retries: int | None,
+        execute: bool,
+        schema_linking: bool | None,
     ) -> Answer:
         started = time.perf_counter()
         strategy = strategy or self.settings.prompt_strategy  # type: ignore[assignment]
@@ -185,6 +222,16 @@ class Pipeline:
         budget = max_retries if max_retries is not None else self.settings.max_retries
 
         answer = Answer(status="error", question=question, provider=self.provider.name)
+        use_linking = self.settings.schema_linking if schema_linking is None else schema_linking
+        prompt_catalog = self.catalog
+        answer.schema_linking = use_linking
+        if use_linking:
+            link = link_schema(
+                question, self.catalog,
+                top_k=self.settings.link_top_k, max_tables=self.settings.link_max_tables,
+            )
+            prompt_catalog = link.catalog
+        answer.tables_selected = sorted(prompt_catalog.tables)
         feedback: str | None = None
         previous_sql: str | None = None
         generation_ms = 0.0
@@ -200,6 +247,7 @@ class Pipeline:
                     few_shot_count=few_shot_count,
                     feedback=feedback,
                     previous_sql=previous_sql,
+                    prompt_catalog=prompt_catalog,
                 )
             except LLMError as err:
                 answer.attempts.append(Attempt(index, None, "generate", False, [str(err)]))
@@ -245,6 +293,7 @@ class Pipeline:
                     Attempt(index, sql, "validate", False, [i.render() for i in result.errors])
                 )
                 if codes & HARD_BLOCK_CODES:
+                    answer.security_violation = True  # 403, and never retried
                     answer.status = "rejected"
                     answer.sql = sql
                     answer.error = result.feedback()
@@ -252,6 +301,11 @@ class Pipeline:
                     answer.generation_ms = generation_ms
                     return answer
                 if index < budget and codes & RETRYABLE_CODES:
+                    if codes & {Code.UNKNOWN_TABLE, Code.UNKNOWN_COLUMN, Code.AMBIGUOUS_COLUMN}:
+                        # The linker may have hidden the table the model needed: widen to the
+                        # full schema for the remaining attempts (recoverable recall miss).
+                        prompt_catalog = self.catalog
+                        answer.tables_selected = sorted(prompt_catalog.tables)
                     feedback = result.feedback()
                     previous_sql = sql
                     continue
@@ -282,6 +336,7 @@ class Pipeline:
                 return answer
 
             answer.plan_summary = gate.summary
+            answer.plan_cost = gate.plan.total_cost
             answer.plan_findings = [f.message for f in gate.findings]
 
             if gate.verdict is Verdict.BLOCK:
