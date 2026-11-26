@@ -16,3 +16,4 @@ FAILURES.md
 drills/
 exercises/
 failures/
+.venv312/
