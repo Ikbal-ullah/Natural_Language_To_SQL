@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     # --- defence in depth --------------------------------------------------
-    statement_timeout_ms: int = Field(default=5_000, alias="NL2SQL_STATEMENT_TIMEOUT_MS")
+    statement_timeout_ms: int = Field(default=3_000, alias="NL2SQL_STATEMENT_TIMEOUT_MS")
     max_plan_cost: float = Field(
         default=5_000_000.0,
         alias="NL2SQL_MAX_PLAN_COST",
@@ -51,6 +51,20 @@ class Settings(BaseSettings):
         description="Largest LIMIT a generated query is allowed to carry.",
     )
     default_limit: int = Field(default=100, alias="NL2SQL_DEFAULT_LIMIT")
+
+    # --- domain ------------------------------------------------------------
+    domain: str = Field(
+        default="learning",
+        alias="NL2SQL_DOMAIN",
+        description="Which prompt domain to use: 'learning' (original 5M-row DB) or 'ecommerce'.",
+    )
+    schema_linking: bool = Field(
+        default=True,
+        alias="NL2SQL_SCHEMA_LINKING",
+        description="Send only the question-relevant tables (BM25 + 1-hop FK) to the model.",
+    )
+    link_top_k: int = Field(default=3, alias="NL2SQL_LINK_TOP_K")
+    link_max_tables: int = Field(default=6, alias="NL2SQL_LINK_MAX_TABLES")
 
     # --- pipeline ----------------------------------------------------------
     max_retries: int = Field(

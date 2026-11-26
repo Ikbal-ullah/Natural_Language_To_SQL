@@ -45,7 +45,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES    TO nl2sql_ro
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO nl2sql_ro;
 
 ALTER ROLE nl2sql_ro SET default_transaction_read_only = on;
-ALTER ROLE nl2sql_ro SET statement_timeout = '5s';
+ALTER ROLE nl2sql_ro SET statement_timeout = '3s';
+ALTER ROLE nl2sql_ro SET work_mem = '16MB';
 -- Cap how long it may sit inside an open transaction holding resources.
 ALTER ROLE nl2sql_ro SET idle_in_transaction_session_timeout = '10s';
 -- Keep the planner honest for this role: we want plan costs that reflect real work.

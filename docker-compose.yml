@@ -1,0 +1,21 @@
+# One command brings up a reproducible, role-hardened PostgreSQL:
+#   docker compose up -d --wait && .venv312/bin/python db/seed_ecommerce.py
+# Host port 5433 (not 5432) so it never collides with a locally installed PostgreSQL.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: nl2sql_shop_pg
+    environment:
+      POSTGRES_USER: nl2sql
+      POSTGRES_PASSWORD: nl2sql_admin_dev
+      POSTGRES_DB: nl2sql_shop
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/ecommerce_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/init_roles.sql:/docker-entrypoint-initdb.d/02_roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nl2sql -d nl2sql_shop"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

@@ -76,9 +76,11 @@ def _make_pool(dsn: str, settings: Settings, *, read_only: bool) -> ConnectionPo
 def get_pool(*, read_only: bool = True, settings: Settings | None = None) -> ConnectionPool:
     """Return (creating on first use) the pool for the requested privilege level."""
     settings = settings or get_settings()
-    key = "ro" if read_only else "admin"
+    dsn = settings.readonly_dsn if read_only else settings.admin_dsn
+    # Keyed by (privilege, DSN), not privilege alone: two databases in one process (the
+    # learners DB and the e-commerce DB, say) must never share a pool.
+    key = f"{'ro' if read_only else 'admin'}|{dsn}"
     if key not in _POOLS:
-        dsn = settings.readonly_dsn if read_only else settings.admin_dsn
         _POOLS[key] = _make_pool(dsn, settings, read_only=read_only)
     return _POOLS[key]
 
